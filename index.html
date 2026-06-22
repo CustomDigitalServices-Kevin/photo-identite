@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Planche photos d'identite - Impression A4</title>
+<!--
+  Local ID-photo print sheet generator.
+  Single self-contained file: open by double-click, works fully offline.
+
+  Document presets (sizes verified against official sources):
+    France (ANTS / ISO 19794-5) - CNI / passport / licence: 35 x 45 mm, face 32-36 mm.
+    Canada passport: 50 x 70 mm, face 31-36 mm, white background.
+    Canada immigration IRCC (PR card / citizenship / visa): 35 x 45 mm, face 31-36 mm, white bg.
+  Sources:
+    - https://www.service-public.fr (France)
+    - https://www.canada.ca/en/immigration-refugees-citizenship/services/canadian-passports/photos.html
+    - https://www.canada.ca/en/immigration-refugees-citizenship/services/application/application-forms-guides/citizenship-application-photograph-specifications.html
+    - IRCC photo spec sheet: photospecs-e.pdf (min frame 35 x 45 mm, head 31-36 mm)
+-->
+<style>
+  /* ---- Physical reference dimensions (millimetres) ---- */
+  :root {
+    --photo-w: 35mm;   /* photo width  (set per document preset) */
+    --photo-h: 45mm;   /* photo height (set per document preset) */
+    --face-w: 26mm;    /* indicative face width guide  (set per preset) */
+    --face-h: 34mm;    /* indicative chin-to-crown guide (set per preset) */
+    --gap: 0mm;        /* spacing between photos, user driven */
+    --zoom: 1;         /* image zoom factor */
+    --ox: 0%;          /* image pan X (% of cell) */
+    --oy: 0%;          /* image pan Y (% of cell) */
+    --ui-bg: #0f1115;
+    --ui-panel: #181b22;
+    --ui-border: #2a2f3a;
+    --ui-text: #e7e9ee;
+    --ui-muted: #9aa3b2;
+    --ui-accent: #3b82f6;
+    --ui-accent-2: #1d4ed8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ---------------- Control panel ---------------- */
+  .panel {
+    background: var(--ui-panel);
+    border-right: 1px solid var(--ui-border);
+    padding: 20px 18px 40px;
+    overflow-y: auto;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+  }
+
+  .panel h1 {
+    font-size: 18px;
+    margin: 0 0 2px;
+    letter-spacing: .2px;
+  }
+  .panel .sub {
+    font-size: 12px;
+    color: var(--ui-muted);
+    margin: 0 0 20px;
+  }
+
+  .field { margin-bottom: 18px; }
+  .field > label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--ui-muted);
+    margin-bottom: 7px;
+  }
+
+  select, input[type="number"] {
+    width: 100%;
+    background: #11141a;
+    border: 1px solid var(--ui-border);
+    color: var(--ui-text);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+  select:focus, input:focus { outline: 2px solid var(--ui-accent); outline-offset: 0; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Selected-document specification reminder */
+  .spec-note {
+    margin-top: 8px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: #bcd2ff;
+    background: rgba(59,130,246,.10);
+    border: 1px solid var(--ui-border);
+    border-radius: 7px;
+    padding: 7px 9px;
+  }
+
+  /* AI white-background status line */
+  .ai-status {
+    margin-top: 8px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--ui-muted);
+    min-height: 14px;
+  }
+  .ai-status.busy { color: #bcd2ff; }
+  .ai-note {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--ui-muted);
+  }
+
+  input[type="range"] { width: 100%; accent-color: var(--ui-accent); }
+  .range-val { float: right; font-weight: 400; color: var(--ui-text); }
+
+  /* Drop zone / file picker */
+  .drop {
+    border: 1.5px dashed var(--ui-border);
+    border-radius: 10px;
+    padding: 18px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    font-size: 13px;
+    color: var(--ui-muted);
+  }
+  .drop:hover, .drop.dragover {
+    border-color: var(--ui-accent);
+    background: rgba(59,130,246,.08);
+    color: var(--ui-text);
+  }
+  .drop strong { color: var(--ui-text); display:block; margin-bottom: 3px; }
+  .drop input { display: none; }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13px;
+    color: var(--ui-text);
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .check input { width: 16px; height: 16px; accent-color: var(--ui-accent); cursor: pointer; }
+
+  .btns { display: grid; gap: 10px; margin-top: 8px; }
+  button.action {
+    border: 0;
+    border-radius: 9px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter .15s, background .15s;
+  }
+  button.primary { background: var(--ui-accent); color: #fff; }
+  button.primary:hover { background: var(--ui-accent-2); }
+  button.primary:disabled { background: #2a3340; color: #6b7280; cursor: not-allowed; }
+  button.ghost { background: #20242d; color: var(--ui-text); }
+  button.ghost:hover { filter: brightness(1.15); }
+
+  .hint {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ui-muted);
+    background: #11141a;
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    padding: 10px 11px;
+    margin-top: 16px;
+  }
+  .hint b { color: var(--ui-text); }
+
+  /* ---------------- Workspace / preview ---------------- */
+  .workspace {
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    overflow: auto;
+    height: 100vh;
+  }
+  .ws-info { font-size: 12.5px; color: var(--ui-muted); }
+  .ws-info b { color: var(--ui-text); }
+  .ws-warn { color: #f59e0b; }
+
+  /* The printable sheet (paper) */
+  .sheet {
+    background: #ffffff;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    /* width/height set inline in mm by JS */
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 2), var(--photo-w));
+    grid-auto-rows: var(--photo-h);
+    gap: var(--gap);
+  }
+
+  .cell {
+    width: var(--photo-w);
+    height: var(--photo-h);
+    position: relative;
+    overflow: hidden;
+    background: #f2f3f5;
+    /* cut guide border */
+    border: var(--cut-border, 0.2mm solid #b9c0cc);
+  }
+  .cell.no-cut { border: 0.2mm solid transparent; }
+
+  .cell .photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: translate(var(--ox), var(--oy)) scale(var(--zoom));
+    transform-origin: center center;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .cell .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aeb4be;
+    font-size: 10px;
+    letter-spacing: .5px;
+  }
+
+  /* On-screen only face guide (chin-to-crown band, adapts to the preset) */
+  .cell .face-guide {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--face-w);    /* indicative face width zone   */
+    height: var(--face-h);   /* ~ chin-to-crown target band  */
+    transform: translate(-50%, -50%);
+    border: 0.3mm dashed rgba(59,130,246,.85);
+    border-radius: 40% 40% 35% 35%;
+    pointer-events: none;
+  }
+
+  .grid.is-dragging { cursor: grabbing; }
+  .grid.has-photo { cursor: grab; }
+
+  /* ---------------- Print rules ---------------- */
+  @media print {
+    .panel, .ws-info { display: none !important; }
+    .app { display: block; }
+    .workspace { padding: 0; height: auto; overflow: visible; display: block; }
+    /* Shrink the printed sheet by 1px so a paper-exact box never rounds onto a
+       second blank page (classic full-height + @page margin:0 overflow trap).
+       Invisible (~0.26mm); the grid stays centred in the slightly smaller box. */
+    .sheet {
+      box-shadow: none;
+      margin: 0;
+      width: calc(var(--paper-w) - 1px) !important;
+      height: calc(var(--paper-h) - 1px) !important;
+    }
+    .face-guide { display: none !important; }   /* never print the guide */
+    html, body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ CONTROLS ============ -->
+  <aside class="panel">
+    <h1>Planche photos d'identite</h1>
+    <p class="sub">Planches de photos d'identite a taille reelle - presets officiels France / Canada</p>
+
+    <div class="field">
+      <label>1. Besoin documentaire</label>
+      <select id="docSelect">
+        <optgroup label="France (norme ANTS / ISO 19794-5)">
+          <option value="fr-std" selected>CNI / Passeport / Permis (35 x 45 mm)</option>
+        </optgroup>
+        <optgroup label="Canada">
+          <option value="ca-passport">Passeport (50 x 70 mm)</option>
+          <option value="ca-pr">Carte de residence permanente (35 x 45 mm)</option>
+          <option value="ca-citizenship">Citoyennete (35 x 45 mm)</option>
+          <option value="ca-visa">Visa / Immigration IRCC (35 x 45 mm)</option>
+        </optgroup>
+        <option value="custom">Taille personnalisee...</option>
+      </select>
+      <div class="spec-note" id="specNote"></div>
+    </div>
+
+    <div class="field" id="photoCustomWrap" style="display:none">
+      <label>Taille photo (largeur x hauteur, mm)</label>
+      <div class="row2">
+        <input type="number" id="photoCustomW" min="20" max="100" step="1" value="35" />
+        <input type="number" id="photoCustomH" min="20" max="100" step="1" value="45" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>2. Photo source</label>
+      <label class="drop" id="dropZone">
+        <strong id="dropTitle">Choisir une photo</strong>
+        Cliquer ou glisser-deposer une image
+        <input type="file" id="fileInput" accept="image/*" />
+      </label>
+      <button class="action ghost" id="aiBtn" disabled style="margin-top:10px;width:100%">Fond blanc auto (IA)</button>
+      <button class="action ghost" id="revertBtn" style="display:none;margin-top:8px;width:100%">Revenir a l'original</button>
+      <div class="ai-status" id="aiStatus"></div>
+      <div class="ai-note">Detourage 100% local (MODNet, la photo ne quitte pas le navigateur). 1er usage : telechargement du modele (~26 Mo) puis cache hors-ligne, detourage en 1 a 2 s. Confort, pas une garantie de conformite officielle.</div>
+    </div>
+
+    <div class="field">
+      <label>3. Disposition</label>
+      <select id="layoutSelect">
+        <option value="2x2">4 photos (2 x 2)</option>
+        <option value="3x2">6 photos (3 x 2)</option>
+        <option value="2x4">8 photos (2 x 4)</option>
+        <option value="4x2">8 photos (4 x 2)</option>
+        <option value="5x2">10 photos (5 x 2)</option>
+        <option value="4x3" selected>12 photos (4 x 3)</option>
+        <option value="3x4">12 photos (3 x 4)</option>
+        <option value="5x4">20 photos (5 x 4)</option>
+        <option value="custom">Personnalise...</option>
+      </select>
+    </div>
+
+    <div class="field" id="customWrap" style="display:none">
+      <label>Grille personnalisee (colonnes x lignes)</label>
+      <div class="row2">
+        <input type="number" id="customCols" min="1" max="6" value="3" />
+        <input type="number" id="customRows" min="1" max="6" value="4" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>4. Format papier</label>
+      <select id="paperSelect">
+        <option value="A4" selected>A4 (210 x 297 mm)</option>
+        <option value="A5">A5 (148 x 210 mm)</option>
+        <option value="10x15">10 x 15 cm</option>
+        <option value="Letter">Lettre US (216 x 279 mm)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Marge papier <span class="range-val" id="marginVal">5 mm</span></label>
+      <input type="range" id="marginRange" min="0" max="20" step="1" value="5" />
+    </div>
+
+    <div class="field">
+      <label>Espacement entre photos <span class="range-val" id="gapVal">0 mm</span></label>
+      <input type="range" id="gapRange" min="0" max="8" step="1" value="0" />
+    </div>
+
+    <div class="field">
+      <label>5. Cadrage du visage</label>
+      <div style="margin-bottom:10px">
+        <label style="text-transform:none;font-weight:400;font-size:12px">Zoom <span class="range-val" id="zoomVal">1.00x</span></label>
+        <input type="range" id="zoomRange" min="1" max="4" step="0.02" value="1" />
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="text-transform:none;font-weight:400;font-size:12px">Position horizontale <span class="range-val" id="oxVal">0</span></label>
+        <input type="range" id="oxRange" min="-80" max="80" step="1" value="0" />
+      </div>
+      <div>
+        <label style="text-transform:none;font-weight:400;font-size:12px">Position verticale <span class="range-val" id="oyVal">0</span></label>
+        <input type="range" id="oyRange" min="-80" max="80" step="1" value="0" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>6. Affichage</label>
+      <label class="check"><input type="checkbox" id="cutToggle" checked /> Traits de coupe</label>
+      <label class="check"><input type="checkbox" id="faceToggle" /> Repere visage (ecran uniquement)</label>
+    </div>
+
+    <div class="btns">
+      <button class="action primary" id="printBtn" disabled>Imprimer la planche</button>
+      <button class="action ghost" id="resetBtn">Reinitialiser le cadrage</button>
+    </div>
+
+    <div class="hint">
+      <b>Impression a taille reelle :</b> dans la boite de dialogue, choisir
+      <b>Echelle = 100 % (Taille reelle)</b>, <b>Marges = Aucune</b>,
+      et le bon format papier. Astuce cadrage : on peut aussi glisser la photo
+      a la souris sur l'apercu et zoomer a la molette.
+    </div>
+  </aside>
+
+  <!-- ============ PREVIEW ============ -->
+  <main class="workspace">
+    <div class="ws-info" id="wsInfo">Importez une photo pour commencer.</div>
+    <div class="sheet" id="sheet">
+      <div class="grid" id="grid"></div>
+    </div>
+  </main>
+</div>
+
+<!-- dynamic @page rule injected here -->
+<style id="pageStyle">@page { size: A4; margin: 0; }</style>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Paper definitions in millimetres (portrait).
+ * ------------------------------------------------------------------ */
+const PAPERS = {
+  A4:      { w: 210,   h: 297 },
+  A5:      { w: 148,   h: 210 },
+  "10x15": { w: 100,   h: 150 },
+  Letter:  { w: 215.9, h: 279.4 },
+};
+
+/* ------------------------------------------------------------------ *
+ * Document presets. Sizes in millimetres, verified against official
+ * France (ANTS) and Canada (IRCC / passport) requirements.
+ * faceMin/faceMax = head height chin-to-crown band (indicative guide).
+ * ------------------------------------------------------------------ */
+const DOC_PRESETS = {
+  "fr-std":         { label: "France - CNI / Passeport / Permis",       w: 35, h: 45, faceMin: 32, faceMax: 36, bg: "fond uni clair (blanc interdit)" },
+  "ca-passport":    { label: "Canada - Passeport",                      w: 50, h: 70, faceMin: 31, faceMax: 36, bg: "fond blanc uni" },
+  "ca-pr":          { label: "Canada - Carte de residence permanente",  w: 35, h: 45, faceMin: 31, faceMax: 36, bg: "fond blanc uni" },
+  "ca-citizenship": { label: "Canada - Citoyennete",                    w: 35, h: 45, faceMin: 31, faceMax: 36, bg: "fond blanc uni" },
+  "ca-visa":        { label: "Canada - Visa / Immigration IRCC",        w: 35, h: 45, faceMin: 31, faceMax: 36, bg: "fond blanc uni" },
+};
+
+/* ------------------------------------------------------------------ *
+ * Application state.
+ * ------------------------------------------------------------------ */
+const state = {
+  imgSrc: null,
+  originalSrc: null,   // kept so the AI white-bg can be reverted
+  doc: "fr-std",
+  photoW: 35,        // mm, driven by the selected document preset
+  photoH: 45,        // mm
+  faceMin: 32,       // mm, chin-to-crown band (guide)
+  faceMax: 36,       // mm
+  cols: 4,
+  rows: 3,
+  paper: "A4",
+  margin: 5,
+  gap: 0,
+  zoom: 1,
+  ox: 0,   // pan X in % of cell
+  oy: 0,   // pan Y in % of cell
+  cutGuides: true,
+  faceGuide: false,
+};
+
+/* ------------------------------------------------------------------ *
+ * Element handles.
+ * ------------------------------------------------------------------ */
+const el = {
+  dropZone:   document.getElementById("dropZone"),
+  dropTitle:  document.getElementById("dropTitle"),
+  fileInput:  document.getElementById("fileInput"),
+  docSelect:      document.getElementById("docSelect"),
+  specNote:       document.getElementById("specNote"),
+  photoCustomWrap:document.getElementById("photoCustomWrap"),
+  photoCustomW:   document.getElementById("photoCustomW"),
+  photoCustomH:   document.getElementById("photoCustomH"),
+  layout:     document.getElementById("layoutSelect"),
+  customWrap: document.getElementById("customWrap"),
+  customCols: document.getElementById("customCols"),
+  customRows: document.getElementById("customRows"),
+  paper:      document.getElementById("paperSelect"),
+  marginRange:document.getElementById("marginRange"),
+  marginVal:  document.getElementById("marginVal"),
+  gapRange:   document.getElementById("gapRange"),
+  gapVal:     document.getElementById("gapVal"),
+  zoomRange:  document.getElementById("zoomRange"),
+  zoomVal:    document.getElementById("zoomVal"),
+  oxRange:    document.getElementById("oxRange"),
+  oxVal:      document.getElementById("oxVal"),
+  oyRange:    document.getElementById("oyRange"),
+  oyVal:      document.getElementById("oyVal"),
+  cutToggle:  document.getElementById("cutToggle"),
+  faceToggle: document.getElementById("faceToggle"),
+  printBtn:   document.getElementById("printBtn"),
+  resetBtn:   document.getElementById("resetBtn"),
+  aiBtn:      document.getElementById("aiBtn"),
+  revertBtn:  document.getElementById("revertBtn"),
+  aiStatus:   document.getElementById("aiStatus"),
+  sheet:      document.getElementById("sheet"),
+  grid:       document.getElementById("grid"),
+  wsInfo:     document.getElementById("wsInfo"),
+  pageStyle:  document.getElementById("pageStyle"),
+};
+
+/* ------------------------------------------------------------------ *
+ * Image loading (file picker + drag and drop).
+ * ------------------------------------------------------------------ */
+function loadFile(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    alert("Veuillez choisir un fichier image (JPEG ou PNG).");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.imgSrc = e.target.result;
+    state.originalSrc = null;            // fresh photo: drop any previous AI cutout
+    el.dropTitle.textContent = file.name.length > 28
+      ? file.name.slice(0, 25) + "..."
+      : file.name;
+    el.printBtn.disabled = false;
+    el.aiBtn.disabled = false;
+    el.revertBtn.style.display = "none";
+    setAiStatus("", false);
+    buildGrid();
+  };
+  reader.onerror = () => alert("Erreur de lecture du fichier.");
+  reader.readAsDataURL(file);
+}
+
+el.fileInput.addEventListener("change", (e) => {
+  if (e.target.files && e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+["dragenter", "dragover"].forEach((evt) =>
+  el.dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    el.dropZone.classList.add("dragover");
+  })
+);
+["dragleave", "drop"].forEach((evt) =>
+  el.dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    el.dropZone.classList.remove("dragover");
+  })
+);
+el.dropZone.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+/* ------------------------------------------------------------------ *
+ * Document need selection -> drives photo size + face guide.
+ * ------------------------------------------------------------------ */
+function applyDoc() {
+  const v = el.docSelect.value;
+  state.doc = v;
+  if (v === "custom") {
+    el.photoCustomWrap.style.display = "";
+    state.photoW = clampInt(el.photoCustomW.value, 20, 100);
+    state.photoH = clampInt(el.photoCustomH.value, 20, 100);
+    // No official face band for a custom size: derive an indicative ~70-80 %.
+    state.faceMin = Math.round(state.photoH * 0.71);
+    state.faceMax = Math.round(state.photoH * 0.80);
+    el.specNote.textContent = `${state.photoW} x ${state.photoH} mm - taille personnalisee`;
+  } else {
+    el.photoCustomWrap.style.display = "none";
+    const d = DOC_PRESETS[v];
+    state.photoW = d.w; state.photoH = d.h;
+    state.faceMin = d.faceMin; state.faceMax = d.faceMax;
+    el.specNote.textContent =
+      `${d.w} x ${d.h} mm - visage ${d.faceMin}-${d.faceMax} mm (menton-crane) - ${d.bg}`;
+  }
+  buildGrid();
+}
+el.docSelect.addEventListener("change", applyDoc);
+[el.photoCustomW, el.photoCustomH].forEach((input) =>
+  input.addEventListener("input", () => { if (el.docSelect.value === "custom") applyDoc(); })
+);
+
+/* ------------------------------------------------------------------ *
+ * Layout selection.
+ * ------------------------------------------------------------------ */
+el.layout.addEventListener("change", () => {
+  const v = el.layout.value;
+  if (v === "custom") {
+    el.customWrap.style.display = "";
+    state.cols = clampInt(el.customCols.value, 1, 6);
+    state.rows = clampInt(el.customRows.value, 1, 6);
+  } else {
+    el.customWrap.style.display = "none";
+    const [c, r] = v.split("x").map(Number);
+    state.cols = c;
+    state.rows = r;
+  }
+  buildGrid();
+});
+
+[el.customCols, el.customRows].forEach((input) =>
+  input.addEventListener("input", () => {
+    if (el.layout.value !== "custom") return;
+    state.cols = clampInt(el.customCols.value, 1, 6);
+    state.rows = clampInt(el.customRows.value, 1, 6);
+    buildGrid();
+  })
+);
+
+/* ------------------------------------------------------------------ *
+ * Paper / margin / gap.
+ * ------------------------------------------------------------------ */
+el.paper.addEventListener("change", () => {
+  state.paper = el.paper.value;
+  buildGrid();
+});
+el.marginRange.addEventListener("input", () => {
+  state.margin = Number(el.marginRange.value);
+  el.marginVal.textContent = state.margin + " mm";
+  buildGrid();
+});
+el.gapRange.addEventListener("input", () => {
+  state.gap = Number(el.gapRange.value);
+  el.gapVal.textContent = state.gap + " mm";
+  buildGrid();
+});
+
+/* ------------------------------------------------------------------ *
+ * Framing controls (zoom / pan).
+ * ------------------------------------------------------------------ */
+el.zoomRange.addEventListener("input", () => {
+  state.zoom = Number(el.zoomRange.value);
+  applyTransform();
+});
+el.oxRange.addEventListener("input", () => {
+  state.ox = Number(el.oxRange.value);
+  applyTransform();
+});
+el.oyRange.addEventListener("input", () => {
+  state.oy = Number(el.oyRange.value);
+  applyTransform();
+});
+
+/* ------------------------------------------------------------------ *
+ * Toggles.
+ * ------------------------------------------------------------------ */
+el.cutToggle.addEventListener("change", () => {
+  state.cutGuides = el.cutToggle.checked;
+  applyCutGuides();
+});
+el.faceToggle.addEventListener("change", () => {
+  state.faceGuide = el.faceToggle.checked;
+  applyFaceGuide();
+});
+
+/* ------------------------------------------------------------------ *
+ * Buttons.
+ * ------------------------------------------------------------------ */
+el.printBtn.addEventListener("click", () => window.print());
+el.resetBtn.addEventListener("click", () => {
+  state.zoom = 1; state.ox = 0; state.oy = 0;
+  el.zoomRange.value = 1; el.oxRange.value = 0; el.oyRange.value = 0;
+  applyTransform();
+});
+
+/* ------------------------------------------------------------------ *
+ * Optional AI white background (MODNet, Apache-2.0, in-browser).
+ * Lazy-loaded from CDN on first use so the tool stays light/offline
+ * otherwise. Model Xenova/modnet: lightweight portrait matting (~26 MB
+ * fp32), purpose-built for portraits (ideal for ID photos). Runs on
+ * CPU/WASM in ~1-2 s, so no WebGPU is required -- this deliberately
+ * avoids the onnxruntime-web WebGPU op failures that crash heavier models
+ * (e.g. BiRefNet: "ShaderModule 'Pad' invalid" / "too many storage
+ * buffers", microsoft/onnxruntime#21968) and the cross-session
+ * contamination of a WebGPU->WASM fallback. The photo never leaves the
+ * browser. Apache-2.0 = commercial use allowed.
+ * ------------------------------------------------------------------ */
+const MODEL_ID = "Xenova/modnet";
+let tfMod = null, bgRemover = null;
+
+function setAiStatus(msg, busy) {
+  el.aiStatus.textContent = msg || "";
+  el.aiStatus.classList.toggle("busy", !!busy);
+}
+
+async function getRemover(onProgress) {
+  if (bgRemover) return bgRemover;
+  if (!tfMod) {
+    onProgress("Chargement de la librairie IA...");
+    tfMod = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0");
+    tfMod.env.allowLocalModels = false;
+  }
+  onProgress("Telechargement du modele (~26 Mo)...");
+  bgRemover = await tfMod.pipeline("background-removal", MODEL_ID, {
+    device: "wasm",
+    dtype: "fp32",
+    progress_callback: (p) => {
+      if (p.status === "progress" && typeof p.file === "string" && p.file.endsWith(".onnx")) {
+        const pct = p.total ? Math.round((p.loaded / p.total) * 100) : null;
+        onProgress(`Telechargement du modele (~26 Mo)${pct != null ? " : " + pct + "%" : "..."}`);
+      }
+    },
+  });
+  return bgRemover;
+}
+
+async function applyWhiteBackground() {
+  if (!state.imgSrc) return;
+  if (!state.originalSrc) state.originalSrc = state.imgSrc;   // always cut from the original
+  el.aiBtn.disabled = true;
+  setAiStatus("Initialisation...", true);
+  try {
+    const remover = await getRemover((m) => setAiStatus(m, true));
+    setAiStatus("Detourage en cours...", true);
+    const image = await tfMod.RawImage.read(state.originalSrc);
+    const res = await remover(image);                 // RGBA RawImage, alpha = subject matte
+    const cutout = Array.isArray(res) ? res[0] : res;
+    state.imgSrc = rgbaOverWhiteDataURL(cutout);
+    buildGrid();
+    el.revertBtn.style.display = "";
+    setAiStatus("Fond blanc applique. Verifiez le rendu (cheveux, contours).", false);
+  } catch (err) {
+    console.error(err);
+    setAiStatus("Echec : " + (err && err.message ? err.message : String(err)), false);
+  } finally {
+    el.aiBtn.disabled = false;
+  }
+}
+
+/* Deterministic, model-independent core: composite an RGBA image (whose
+ * alpha channel is the subject coverage) over a white background.
+ * Function declaration so it can be unit-tested in isolation. */
+function compositeOnWhite(rgba, w, h) {
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const a = rgba[i * 4 + 3] / 255;   // coverage 0..1 from alpha
+    const inv = 1 - a;
+    out[i * 4]     = Math.round(rgba[i * 4]     * a + 255 * inv);
+    out[i * 4 + 1] = Math.round(rgba[i * 4 + 1] * a + 255 * inv);
+    out[i * 4 + 2] = Math.round(rgba[i * 4 + 2] * a + 255 * inv);
+    out[i * 4 + 3] = 255;
+  }
+  return out;
+}
+
+function rgbaOverWhiteDataURL(rgbaImage) {
+  if (rgbaImage.channels !== 4) throw new Error("sortie modele inattendue (pas RGBA)");
+  const w = rgbaImage.width, h = rgbaImage.height;
+  const out = compositeOnWhite(new Uint8ClampedArray(rgbaImage.data), w, h);
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  cv.getContext("2d").putImageData(new ImageData(out, w, h), 0, 0);
+  return cv.toDataURL("image/png");
+}
+
+el.aiBtn.addEventListener("click", applyWhiteBackground);
+el.revertBtn.addEventListener("click", () => {
+  if (!state.originalSrc) return;
+  state.imgSrc = state.originalSrc;
+  buildGrid();
+  el.revertBtn.style.display = "none";
+  setAiStatus("Photo originale restauree.", false);
+});
+
+/* ------------------------------------------------------------------ *
+ * Mouse drag + wheel framing on the preview.
+ * ------------------------------------------------------------------ */
+let dragging = false, dragStart = null;
+el.grid.addEventListener("pointerdown", (e) => {
+  if (!state.imgSrc) return;
+  dragging = true;
+  dragStart = { x: e.clientX, y: e.clientY, ox: state.ox, oy: state.oy };
+  el.grid.classList.add("is-dragging");
+  el.grid.setPointerCapture(e.pointerId);
+});
+el.grid.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  // Convert pixel delta to % of a single cell.
+  const rect = el.sheet.getBoundingClientRect();
+  const paper = PAPERS[state.paper];
+  const mmToPx = rect.width / paper.w;
+  const cellWpx = state.photoW * mmToPx;
+  const cellHpx = state.photoH * mmToPx;
+  const dxPct = ((e.clientX - dragStart.x) / cellWpx) * 100;
+  const dyPct = ((e.clientY - dragStart.y) / cellHpx) * 100;
+  state.ox = clamp(dragStart.ox + dxPct, -80, 80);
+  state.oy = clamp(dragStart.oy + dyPct, -80, 80);
+  el.oxRange.value = Math.round(state.ox);
+  el.oyRange.value = Math.round(state.oy);
+  applyTransform();
+});
+function endDrag(e) {
+  if (!dragging) return;
+  dragging = false;
+  el.grid.classList.remove("is-dragging");
+  try { el.grid.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+el.grid.addEventListener("pointerup", endDrag);
+el.grid.addEventListener("pointercancel", endDrag);
+
+el.grid.addEventListener("wheel", (e) => {
+  if (!state.imgSrc) return;
+  e.preventDefault();
+  const next = clamp(state.zoom + (e.deltaY < 0 ? 0.08 : -0.08), 1, 4);
+  state.zoom = Math.round(next * 100) / 100;
+  el.zoomRange.value = state.zoom;
+  applyTransform();
+}, { passive: false });
+
+/* ------------------------------------------------------------------ *
+ * Rendering helpers.
+ * ------------------------------------------------------------------ */
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function clampInt(v, lo, hi) {
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) return lo;
+  return clamp(n, lo, hi);
+}
+
+function applyTransform() {
+  document.documentElement.style.setProperty("--zoom", state.zoom);
+  document.documentElement.style.setProperty("--ox", state.ox + "%");
+  document.documentElement.style.setProperty("--oy", state.oy + "%");
+  el.zoomVal.textContent = state.zoom.toFixed(2) + "x";
+  el.oxVal.textContent = Math.round(state.ox);
+  el.oyVal.textContent = Math.round(state.oy);
+}
+
+function applyCutGuides() {
+  el.grid.querySelectorAll(".cell").forEach((c) =>
+    c.classList.toggle("no-cut", !state.cutGuides)
+  );
+}
+
+function applyFaceGuide() {
+  el.grid.querySelectorAll(".face-guide").forEach((g) =>
+    g.style.display = state.faceGuide ? "" : "none"
+  );
+}
+
+/* Validate that the requested grid fits on the chosen paper. */
+function checkFit() {
+  const p = PAPERS[state.paper];
+  const usableW = p.w - 2 * state.margin;
+  const usableH = p.h - 2 * state.margin;
+  const needW = state.cols * state.photoW + (state.cols - 1) * state.gap;
+  const needH = state.rows * state.photoH + (state.rows - 1) * state.gap;
+  return { ok: needW <= usableW + 0.01 && needH <= usableH + 0.01, needW, needH, usableW, usableH };
+}
+
+function buildGrid() {
+  const p = PAPERS[state.paper];
+
+  // Size the paper. Expose dimensions as CSS vars so the print rule can
+  // reference them (it shrinks the printed box by 1px to avoid page overflow).
+  el.sheet.style.setProperty("--paper-w", p.w + "mm");
+  el.sheet.style.setProperty("--paper-h", p.h + "mm");
+  el.sheet.style.width = "var(--paper-w)";
+  el.sheet.style.height = "var(--paper-h)";
+  el.sheet.style.padding = state.margin + "mm";
+
+  // Inject the matching @page rule so the print output uses the right paper.
+  el.pageStyle.textContent = `@page { size: ${p.w}mm ${p.h}mm; margin: 0; }`;
+
+  // Grid + photo + face-guide variables (driven by the document preset).
+  el.grid.style.setProperty("--cols", state.cols);
+  document.documentElement.style.setProperty("--gap", state.gap + "mm");
+  document.documentElement.style.setProperty("--photo-w", state.photoW + "mm");
+  document.documentElement.style.setProperty("--photo-h", state.photoH + "mm");
+  const faceH = (state.faceMin + state.faceMax) / 2;   // mid chin-to-crown
+  document.documentElement.style.setProperty("--face-h", faceH + "mm");
+  document.documentElement.style.setProperty("--face-w", (faceH * 0.72) + "mm");
+
+  // Rebuild cells.
+  el.grid.innerHTML = "";
+  const total = state.cols * state.rows;
+  for (let i = 0; i < total; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell" + (state.cutGuides ? "" : " no-cut");
+
+    if (state.imgSrc) {
+      const img = document.createElement("img");
+      img.className = "photo";
+      img.src = state.imgSrc;
+      img.alt = "photo identite";
+      cell.appendChild(img);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "placeholder";
+      ph.textContent = state.photoW + " x " + state.photoH;
+      cell.appendChild(ph);
+    }
+
+    const fg = document.createElement("div");
+    fg.className = "face-guide";
+    fg.style.display = state.faceGuide ? "" : "none";
+    cell.appendChild(fg);
+
+    el.grid.appendChild(cell);
+  }
+
+  el.grid.classList.toggle("has-photo", !!state.imgSrc);
+  applyTransform();
+  updateInfo();
+}
+
+function updateInfo() {
+  const total = state.cols * state.rows;
+  const fit = checkFit();
+  const docLabel = state.doc === "custom"
+    ? "Taille personnalisee"
+    : DOC_PRESETS[state.doc].label;
+  let msg = `<b>${total}</b> photos ${state.photoW} x ${state.photoH} mm - ${docLabel}`
+          + ` - grille ${state.cols} x ${state.rows} - papier ${state.paper}`;
+  if (!fit.ok) {
+    msg += ` &nbsp;<span class="ws-warn">Attention : la grille (${fit.needW.toFixed(0)} x ${fit.needH.toFixed(0)} mm) `
+         + `depasse la zone imprimable (${fit.usableW.toFixed(0)} x ${fit.usableH.toFixed(0)} mm). `
+         + `Reduisez la marge, l'espacement ou le nombre de photos.</span>`;
+  }
+  el.wsInfo.innerHTML = msg;
+}
+
+/* ------------------------------------------------------------------ *
+ * Init. applyDoc() sets photo size + spec note, then calls buildGrid().
+ * ------------------------------------------------------------------ */
+applyDoc();
+</script>
+</body>
+</html>
