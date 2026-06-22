@@ -97,6 +97,16 @@ corrige ni l'éclairage ni les ombres. C'est un confort, **pas une garantie de
 conformité officielle**, en particulier pour le passeport canadien (autorité
 stricte). Vérifie toujours le rendu.
 
+> **Note** : la planche et l'impression fonctionnent en double-clic
+> (`file://`). En revanche, certains navigateurs (Chrome notamment) bloquent le
+> chargement du modèle IA depuis un fichier ouvert en double-clic. Si le bouton
+> **Fond blanc auto** reste sans effet, sers le dossier via un petit serveur
+> local puis ouvre `http://localhost:8000` :
+> ```bash
+> cd photo-identite
+> python -m http.server 8000
+> ```
+
 ## Confidentialité
 
 Tout se passe en local dans ton navigateur : la photo n'est ni uploadée, ni
