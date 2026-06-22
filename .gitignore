@@ -1,0 +1,12 @@
+# Test / tooling artifacts
+test-photo.png
+*.tmp
+.playwright-mcp/
+final.png
+verify-*.png
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
