@@ -142,4 +142,7 @@ licence Apache 2.0, et **Transformers.js** sous Apache 2.0.
 - [MODNet](https://github.com/ZHKKKe/MODNet) — matting de portrait (Apache 2.0)
 - [Transformers.js](https://github.com/huggingface/transformers.js) — exécution du modèle dans le navigateur (Apache 2.0)
 
-Développé par Kevin Tomas / Custom Digital Services.
+## À propos
+
+Conçu et maintenu par [Kevin Tomas](https://www.custom-digital-services.com/?utm_source=github&utm_medium=readme&utm_campaign=photo-identite), consultant freelance Power Platform et IA Microsoft (Custom Digital Services).
+Essayer en ligne : [www.custom-digital-services.com/outils/photo-identite](https://www.custom-digital-services.com/outils/photo-identite/?utm_source=github&utm_medium=readme&utm_campaign=photo-identite). Autres outils gratuits : [www.custom-digital-services.com/outils](https://www.custom-digital-services.com/outils/?utm_source=github&utm_medium=readme&utm_campaign=photo-identite)
